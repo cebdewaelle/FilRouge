@@ -1,0 +1,49 @@
+services:
+  # --- SEAWEEDFS (Data Lake / S3 local) ---
+  master:
+    image: chrislusf/seaweedfs
+    ports:
+      - "9333:9333"
+    command: "master"
+
+  volume:
+    image: chrislusf/seaweedfs
+    ports:
+      - "8080:8080"
+    command: "volume -mserver=master:9333"
+    depends_on:
+      - master
+
+  s3:
+    image: chrislusf/seaweedfs
+    ports:
+      - "8333:8333"
+    command: 's3 -filer="master:9333"'
+    depends_on:
+      - master
+
+  # --- CLICKHOUSE (Moteur de calcul) ---
+  clickhouse:
+    image: clickhouse/clickhouse-server
+    ports:
+      - "8123:8123" # Port HTTP (pour ton script Python)
+      - "9000:9000" # Port Natif (pour DBeaver)
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - ./ch_data:/var/lib/clickhouse # Persistance des données
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- DB-GATE (Interface graphique pour voir tes données) ---
+  dbgate:
+    image: dbgate/dbgate
+    ports:
+      - "3000:3000"
+    depends_on:
+      - clickhouse
